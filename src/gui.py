@@ -496,6 +496,9 @@ class OpenOCRApp(Tk):
             lbl.pack(fill="x", padx=10, pady=5)
 
     def restart_backend(self):
+        if self.processing:
+            messagebox.showwarning('Processing', 'Finish the current OCR job before restarting the backend.')
+            return
         if self.start_backend_callback:
             # We pass the settings to the callback
             try:
@@ -512,15 +515,24 @@ class OpenOCRApp(Tk):
     def _restart_thread(self, model, port, btype):
         try:
             success = self.start_backend_callback(model, port, btype)
+            error = None
         except Exception as exc:
-            self.after(0, lambda message=str(exc): messagebox.showerror("Backend error", message))
             success = False
-        if success:
-            self.after(0, lambda: self.status_label.configure(text="Backend running."))
-            self.after(0, lambda: messagebox.showinfo("Success", "Backend restarted successfully."))
-        else:
-            self.after(0, lambda: self.status_label.configure(text="Error starting backend."))
-            self.after(0, lambda: messagebox.showerror("Error", "Failed to clear or start the backend."))
+            error = str(exc)
+
+        def finish_restart():
+            if success:
+                self.set_status("Backend running.", "green")
+                if not self.processing:
+                    self.btn_process.configure(state="normal")
+                messagebox.showinfo("Success", "Backend started successfully.")
+            else:
+                self.set_status("Backend unavailable." + (" " + error if error else ""), "red")
+                if not self.processing:
+                    self.btn_process.configure(state="disabled")
+                messagebox.showerror("Backend error", error or "Failed to start the selected backend.")
+
+        self.after(0, finish_restart)
 
 if __name__ == "__main__":
     app = OpenOCRApp()
