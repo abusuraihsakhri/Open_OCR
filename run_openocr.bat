@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 setlocal enabledelayedexpansion
 
 echo ==========================================
@@ -27,6 +28,11 @@ call venv\Scripts\activate
 :: 4. Install/Update dependencies
 echo [INFO] Checking dependencies...
 pip install -r requirements.txt
+if errorlevel 1 (
+    echo [ERROR] Dependency installation failed.
+    pause
+    exit /b 1
+)
 
 :: 5. Launch Application
 echo [SUCCESS] Everything is ready. Starting OpenOCR...

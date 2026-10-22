@@ -9,6 +9,7 @@ import pyperclip
 import re
 import io
 from PIL import Image
+from ocr_core import image_as_png, response_text, validate_port, valid_json_output
 
 # For PDF conversion
 try:
@@ -46,6 +47,10 @@ class OpenOCRApp(Tk):
         self.grid_columnconfigure(0, weight=1)
         
         self.history = []
+        self.json_results = []
+        self._processing_failed = False
+        self._error_message = None
+        self.processing = False
         self.start_backend_callback = start_backend_callback
         
         self.setup_ui()
@@ -262,11 +267,11 @@ class OpenOCRApp(Tk):
         self.history_labels = []
 
     def handle_drop(self, event):
-        if event.data:
-            # Parse drop target payload (deals with spaces in paths enclosed in {})
-            matches = re.findall(r'\{([^}]+)\}|(\S+)', event.data)
-            paths = [m[0] if m[0] else m[1] for m in matches]
-            valid_paths = [p for p in paths if os.path.exists(p)]
+        if event.data and not self.processing:
+            # Tcl's parser handles both paths with spaces and brace-quoted paths.
+            paths = self.tk.splitlist(event.data)
+            extensions = {'.png', '.jpg', '.jpeg', '.pdf'}
+            valid_paths = [p for p in paths if os.path.isfile(p) and os.path.splitext(p)[1].lower() in extensions]
             if valid_paths:
                 self.current_files = valid_paths
                 if len(valid_paths) == 1:
@@ -275,9 +280,11 @@ class OpenOCRApp(Tk):
                     self.lbl_drop.configure(text=f"{len(valid_paths)} files selected")
 
     def browse_file(self, event=None):
+        if self.processing:
+            return
         filenames = filedialog.askopenfilenames(
             title="Select Image or PDF",
-            filetypes=(("Images & PDFs", "*.png;*.jpg;*.jpeg;*.pdf"), ("All Files", "*.*"))
+            filetypes=(("Images & PDFs", "*.png *.jpg *.jpeg *.pdf"), ("All Files", "*.*"))
         )
         if filenames:
             self.current_files = list(filenames)
@@ -287,32 +294,44 @@ class OpenOCRApp(Tk):
                 self.lbl_drop.configure(text=f"{len(self.current_files)} files selected")
 
     def process_document(self):
+        if self.processing:
+            return
         if not self.current_files:
             messagebox.showerror("Error", "Please select valid files first.")
             return
-            
+        try:
+            port = validate_port(self.api_port_var.get())
+            model = self.model_path_var.get().strip()
+            backend = self.backend_type_var.get()
+            if not model:
+                raise ValueError("Model name or path cannot be empty.")
+        except ValueError as exc:
+            messagebox.showerror("Invalid settings", str(exc))
+            return
+
+        selected_files = list(self.current_files)
         self.text_md.delete("1.0", "end")
         self.text_json.delete("1.0", "end")
-        
-        self.status_label.configure(text="Processing...")
+        self.json_results = []
+        self._processing_failed = False
+        self._error_message = None
+        self.processing = True
+        self.set_status("Processing...", "yellow")
         self.progress_bar.start()
         self.btn_process.configure(state="disabled")
-        
-        # Run in a separate thread so GUI doesn't freeze
-        threading.Thread(target=self._process_thread, daemon=True).start()
+        self.btn_clear.configure(state="disabled")
 
-    def _process_thread(self):
+        threading.Thread(
+            target=self._process_thread,
+            args=(selected_files, port, model, backend),
+            daemon=True,
+        ).start()
+
+    def _process_thread(self, selected_files, port, model, backend):
         full_md = ""
-        full_json_list = []
-        
         try:
-            port = int(self.api_port_var.get())
-            model = self.model_path_var.get()
-            backend = self.backend_type_var.get()
-            
-            total_files = len(self.current_files)
-            
-            for file_idx, file_path in enumerate(self.current_files):
+            total_files = len(selected_files)
+            for file_idx, file_path in enumerate(selected_files):
                 filename = os.path.basename(file_path)
                 ext = os.path.splitext(file_path)[1].lower()
                 
@@ -336,15 +355,7 @@ class OpenOCRApp(Tk):
                         break
                 else:
                     with Image.open(file_path) as img:
-                        max_dim = 1536
-                        if max(img.width, img.height) > max_dim:
-                            scale = max_dim / max(img.width, img.height)
-                            img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
-                        if img.width % 2 != 0 or img.height % 2 != 0:
-                            img = img.resize((img.width // 2 * 2, img.height // 2 * 2))
-                        buf = io.BytesIO()
-                        img.save(buf, format="PNG")
-                        pages_data.append((filename, buf.getvalue()))
+                        pages_data.append((filename, image_as_png(img)))
 
                 for label, img_data in pages_data:
                     b64_img = base64.b64encode(img_data).decode('utf-8')
@@ -363,7 +374,7 @@ class OpenOCRApp(Tk):
                             "model": model,
                             "messages": [{"role": "user", "content": [
                                 {"type": "text", "text": "Extract text and structured data from this document."},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
                             ]}],
                             "max_tokens": 4096
                         }
@@ -372,35 +383,42 @@ class OpenOCRApp(Tk):
                     
                     if response.status_code == 200:
                         data = response.json()
-                        result_text = data.get("response", "") if backend == "ollama" else data["choices"][0]["message"]["content"]
+                        result_text = response_text(data, backend)
                         
                         # Format output
                         page_header = f"\n## {label}\n\n"
                         full_md += page_header + result_text + "\n\n---\n"
-                        full_json_list.append({"source": label, "content": data})
-                        
-                        # Update UI incrementally
-                        self.after(0, self.append_to_output, page_header + result_text + "\n\n---\n", json.dumps(data, indent=2))
+                        # Use a real JSON array for multi-file / multi-page output.
+                        self.after(0, self.append_to_output, page_header + result_text + "\n\n---\n",
+                                   {"source": filename, "page": label, "content": data})
                     else:
                         error_msg = f"\n## Error processing {label}\nStatus: {response.status_code}\n"
                         full_md += error_msg
-                        self.after(0, self.append_to_output, error_msg, "")
+                        self._processing_failed = True
+                        self.after(0, self.append_to_output, error_msg,
+                                   {"source": filename, "page": label, "error": response.status_code})
 
             # Add to history at the end
-            final_filename = os.path.basename(self.current_files[0]) + (f" (+{len(self.current_files)-1} more)" if len(self.current_files)>1 else "")
-            self.history.append({"file": final_filename, "result": full_md[:100] + "..."})
-            self.after(0, self.refresh_history)
+            if full_md:
+                final_filename = os.path.basename(selected_files[0]) + (f" (+{len(selected_files)-1} more)" if len(selected_files)>1 else "")
+                self.history.append({"file": final_filename, "result": full_md[:100] + "..."})
+                self.after(0, self.refresh_history)
 
         except Exception as e:
-            self.after(0, lambda: self.set_status(f"Error: {str(e)}", "red"))
-            self.after(0, lambda: messagebox.showerror("Process Error", str(e)))
+            self._processing_failed = True
+            self._error_message = str(e)
+            self.after(0, lambda message=str(e): self.set_status("Error: " + message, "red"))
+            self.after(0, lambda message=str(e): messagebox.showerror("Process Error", message))
             
         finally:
             self.after(0, self.finish_processing)
 
     def append_to_output(self, md_chunk, json_chunk):
         self.text_md.insert("end", md_chunk)
-        self.text_json.insert("end", json_chunk + "\n,\n")
+        if json_chunk is not None:
+            self.json_results.append(json_chunk)
+        self.text_json.delete("1.0", "end")
+        self.text_json.insert("1.0", valid_json_output(self.json_results))
         self.text_md.see("end")
         self.text_json.see("end")
 
@@ -412,14 +430,24 @@ class OpenOCRApp(Tk):
         self.text_json.insert("1.0", json_text)
 
     def finish_processing(self):
-        self.set_status("Ready. Document processed.", "green")
+        self.processing = False
         self.progress_bar.stop()
         self.btn_process.configure(state="normal")
+        self.btn_clear.configure(state="normal")
+        if self._processing_failed:
+            self.set_status("Error: " + self._error_message if self._error_message
+                            else "Completed with errors; see output.", "red")
+        else:
+            self.set_status("Ready. Document processed.", "green")
 
     def copy_clipboard(self):
         content = self.text_md.get("1.0", "end-1c")
         if content.strip():
-            pyperclip.copy(content)
+            try:
+                pyperclip.copy(content)
+            except pyperclip.PyperclipException as exc:
+                messagebox.showerror("Clipboard unavailable", str(exc))
+                return
             self.set_status("Copied to clipboard!", "green")
             self.after(2000, lambda: self.set_status("Ready.", "green"))
 
@@ -448,10 +476,14 @@ class OpenOCRApp(Tk):
         self.status_indicator.configure(text_color=color_map.get(indicator_color, "gray"))
 
     def clear_main(self):
+        if self.processing:
+            return
+        self.json_results = []
         self.current_files = []
         self.lbl_drop.configure(text="📄 Drag & Drop Image/PDF here\nor click to browse")
         self.text_md.delete("1.0", "end")
         self.text_json.delete("1.0", "end")
+        self.set_status("Ready.", "green")
 
     def refresh_history(self):
         for widget in self.history_scroll.winfo_children():
@@ -464,12 +496,16 @@ class OpenOCRApp(Tk):
             lbl.pack(fill="x", padx=10, pady=5)
 
     def restart_backend(self):
+        if self.processing:
+            messagebox.showwarning('Processing', 'Finish the current OCR job before restarting the backend.')
+            return
         if self.start_backend_callback:
             # We pass the settings to the callback
             try:
-                port = int(self.api_port_var.get())
-            except ValueError:
-                port = 11434
+                port = validate_port(self.api_port_var.get())
+            except ValueError as exc:
+                messagebox.showerror("Invalid port", str(exc))
+                return
             model = self.model_path_var.get()
             btype = self.backend_type_var.get()
             
@@ -477,13 +513,26 @@ class OpenOCRApp(Tk):
             threading.Thread(target=self._restart_thread, args=(model, port, btype), daemon=True).start()
 
     def _restart_thread(self, model, port, btype):
-        success = self.start_backend_callback(model, port, btype)
-        if success:
-            self.after(0, lambda: self.status_label.configure(text="Backend running."))
-            self.after(0, lambda: messagebox.showinfo("Success", "Backend restarted successfully."))
-        else:
-            self.after(0, lambda: self.status_label.configure(text="Error starting backend."))
-            self.after(0, lambda: messagebox.showerror("Error", "Failed to clear or start the backend."))
+        try:
+            success = self.start_backend_callback(model, port, btype)
+            error = None
+        except Exception as exc:
+            success = False
+            error = str(exc)
+
+        def finish_restart():
+            if success:
+                self.set_status("Backend running.", "green")
+                if not self.processing:
+                    self.btn_process.configure(state="normal")
+                messagebox.showinfo("Success", "Backend started successfully.")
+            else:
+                self.set_status("Backend unavailable." + (" " + error if error else ""), "red")
+                if not self.processing:
+                    self.btn_process.configure(state="disabled")
+                messagebox.showerror("Backend error", error or "Failed to start the selected backend.")
+
+        self.after(0, finish_restart)
 
 if __name__ == "__main__":
     app = OpenOCRApp()

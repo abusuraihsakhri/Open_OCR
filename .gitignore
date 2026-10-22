@@ -40,3 +40,13 @@ Thumbs.db
 *.spec
 dist/
 build/
+
+# Local settings, credentials, caches and logs
+.env
+.env.*
+!.env.example
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
