@@ -39,6 +39,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Browser UI smoke test
         run: node tests/ui-smoke.mjs
+      - name: Real OCR image and PDF integration
+        run: node tests/ui-real.mjs
   pages:
     if: github.event_name != 'pull_request'
     needs: test
