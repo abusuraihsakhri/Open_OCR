@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+cd "$(dirname "$0")"
 
 echo "=========================================="
 echo "      OpenOCR - One-Click Launcher        "
@@ -30,9 +32,3 @@ pip install -r requirements.txt
 echo "[SUCCESS] Starting OpenOCR..."
 python3 src/main.py
 
-# Keep terminal open on error
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "[ERROR] Application crashed."
-    read -p "Press enter to exit..."
-fi

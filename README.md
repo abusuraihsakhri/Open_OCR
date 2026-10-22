@@ -1,79 +1,55 @@
-# OpenOCR 🚀
+# OpenOCR
 
-**OpenOCR** is a state-of-the-art, single-click desktop application designed for high-performance, local, and private Optical Character Recognition (OCR). This tool bundles the powerful **GLM-OCR** model within a modern, user-friendly interface, ensuring your documents are processed entirely on your local hardware.
+OpenOCR extracts text from images and PDF documents. It offers two distinct applications:
 
----
+- **Desktop:** a Python/CustomTkinter application using a local Ollama or vLLM server with GLM-OCR. It supports multi-file images, multi-page PDFs, Markdown, valid JSON, and in-memory session history.
+- **Browser:** a static web application in [docs/](docs/) that uses Tesseract.js (WebAssembly) and PDF.js. It supports images and PDFs, multiple languages, batch processing, and Markdown/JSON downloads. **This is not GLM-OCR running in the browser.**
 
-### Developed by: **Dr. Abu Suraih Sakhri**
+A GitHub Pages deployment workflow is included. The browser site becomes public once GitHub Pages is enabled for the repository and deployment succeeds.
 
----
+## Desktop quick start
 
-## ✨ Features
+Prerequisites: Python 3.12 or newer, [Ollama](https://ollama.com/), and an installed GLM-OCR model. For the optional vLLM backend, install vLLM separately in a compatible GPU/Python environment.
 
-- 🔒 **Privacy-First**: No external API calls. All document processing happens locally on your machine.
-- 📁 **Universal Drag & Drop**: Seamlessly process images (PNG, JPG) and PDFs by dragging them directly into the app.
-- 🤖 **Local AI Engine**: Built-in process management for **Ollama** and **vLLM**, optimized for NVIDIA GPUs (6GB+ VRAM).
-- 🎨 **Modern UI**: A sleek, premium interface built with **CustomTkinter**, featuring real-time Light/Dark mode toggling.
-- 📝 **Markdown & JSON Output**: View extracted text in structured Markdown or raw JSON formats.
-- 📋 **Integrated History**: Keep track of your previous OCR results in the session history tab.
-- ⚡ **One-Click Execution**: Automated environment setup and dependency installation via the unified launcher.
+1. Start Ollama, then run: **ollama pull glm-ocr**.
+2. On Windows, run **run_openocr.bat**. On Linux/macOS with a graphical Tk environment, run **./run_openocr.sh**.
+3. Select or drag PNG/JPEG images or PDF documents.
+4. Click **Process Document**. Copy the recognized Markdown text or save it to a file. The JSON tab contains a valid array of page records.
 
----
+Manual installation from the repository directory:
 
-## 🛠️ Technology Stack
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    python src/main.py
 
-- **Frontend**: CustomTkinter (Python Desktop GUI)
-- **OCR Model**: zai-org/GLM-OCR (0.9B VLM)
-- **Inference Engines**: Ollama (Primary) / vLLM (Secondary)
-- **Local Database**: Session History Management
-- **Packaging**: PyInstaller compatible
+The default Ollama port is 11434. The Settings tab allows changing the model, port, backend and appearance. The optional vLLM workflow no longer enables arbitrary model repository code by default. Only after reviewing and trusting a repository that requires it, set **OPENOCR_TRUST_REMOTE_CODE=1**.
 
----
+## Browser quick start
 
-## 🚀 Getting Started
+The standalone web application is located at [docs/index.html](docs/index.html). For local development:
 
-### Prerequisites
+    python3 -m http.server 8000 --directory docs
 
-1. **Python**: Ensure you have [Python 3.12+](https://www.python.org/downloads/) installed.
-2. **Ollama**: Download and install [Ollama](https://ollama.com/) (Recommended for Windows).
-3. **Hardware**: An NVIDIA GPU with at least **6GB VRAM** is recommended for smooth performance.
+Then visit http://127.0.0.1:8000/ and select or drop files, choose a recognition language, and click **Recognize text**. Export the result as Markdown or JSON. The browser version supports English, German, French, Spanish and English/German OCR. Limits: 20 files per batch, 25 MiB per file and 50 pages per PDF.
 
-### Quick Launch (Windows)
+## Privacy and dependencies
 
-1. **Pull the Model**: Open your terminal and run:
-   ```bash
-   ollama pull glm-ocr
-   ```
-2. **Run the App**: Double-click **`run_openocr.bat`**.
-   - *On the first run, the launcher will automatically create a virtual environment and install all necessary Python dependencies (CustomTkinter, Pillow, etc.).*
+- Desktop requests go to the configured local Ollama/vLLM service. Documents are not intentionally sent to a hosted application API. Installing packages and models may require internet access.
+- Browser recognition and PDF rendering operate on-device, with no application backend or account. The browser downloads third-party Tesseract.js and PDF.js scripts, WebAssembly resources, and language data; these scripts run within the browser and should be treated as external dependencies. Outputs are held in memory, not stored in a cloud history.
+- No external API key is required. For confidential documents, use a trusted device and network.
 
----
+## Development, tests and compatibility
 
-## ⚙️ Configuration
+- Desktop stack: Python, CustomTkinter, Pillow, PyMuPDF, Requests, tkinterdnd2, Ollama or optional vLLM.
+- Web stack: HTML, CSS, JavaScript, Tesseract.js 5.1.1, PDF.js 3.11.174. No server-side Python runs on GitHub Pages.
+- Python regression tests: **python -m unittest discover -s tests -p 'test_*.py' -v**
+- JavaScript unit tests: **node --test tests/*.test.mjs**
+- CI also runs compilation checks and a Playwright Chromium UI smoke test.
+- The web version targets browsers supporting WebAssembly, Web Workers, and local file input. Chromium is the automated browser test target; full cross-browser testing has not been performed.
 
-OpenOCR adaptive backend logic allows you to customize the performance:
-- **Appearance**: Toggle between Light, Dark, or System themes in the **Settings** tab.
-- **Port Management**: Defaulted to `11434` for Ollama. If you use a custom port, you can update it in Settings.
-- **GPU Optimization**: The app automatically caps VRAM utilization at 80% to ensure system stability.
+## License
 
----
+No repository license file has been published. The GLM-OCR model and external libraries are subject to their own licenses.
 
-## 📦 Distribution & Packaging
-
-To bundle OpenOCR into a standalone executable (`.exe`):
-
-```bash
-pip install pyinstaller
-pyinstaller --noconfirm --onedir --windowed --name "OpenOCR" --add-data "src;src" "src/main.py"
-```
-
-*Note: Ensure `tkinterdnd2` and `customtkinter` libraries are correctly referenced in your build configuration.*
-
----
-
-## 📜 License
-
-This project is developed for private and professional use. The underlying GLM-OCR model is subject to its original repository's licensing terms.
-
----
-*Developed with ❤️ by Dr. Abu Suraih Sakhri*
+Developed by Dr. Abu Suraih Sakhri.
