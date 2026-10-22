@@ -1,4 +1,4 @@
-"""Browser smoke test: UI flows with deterministic OCR and PDF worker stubs."""
+// Browser smoke test with deterministic OCR and PDF worker stubs.
 import {chromium} from "playwright";
 import {spawn} from "node:child_process";
 import assert from "node:assert/strict";

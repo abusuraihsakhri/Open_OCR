@@ -31,6 +31,8 @@ jobs:
         run: node --check docs/app.js
       - name: Browser JavaScript tests
         run: node --test tests/*.test.mjs
+      - name: UI smoke test syntax
+        run: node --check tests/ui-smoke.mjs
       - name: Install headless browser for UI smoke test
         run: |
           npm install --no-save playwright@1.56.1
