@@ -16,7 +16,7 @@ try {
     catch(e){await new Promise(resolve=>setTimeout(resolve,300));}
   }
   assert.ok(connected,"Cannot load browser OCR application.");
-  await page.waitForFunction(()=>Boolean(window.Tesseract&&window.pdfjsLib),{timeout:30000});
+  await page.waitForFunction(()=>Boolean(window.Tesseract&&window.pdfjsLib),null,{timeout:60000});
   const bytes=await page.evaluate(async()=>{
     const canvas=document.createElement("canvas");
     canvas.width=780;canvas.height=175;
@@ -29,7 +29,7 @@ try {
   });
   await page.locator("#file-input").setInputFiles({name:"hello.png",mimeType:"image/png",buffer:Buffer.from(bytes)});
   await page.locator("#recognize").click();
-  await page.waitForFunction(()=>document.querySelector("#status").textContent.startsWith("Complete:"),{timeout:150000});
+  await page.waitForFunction(()=>document.querySelector("#status").textContent.startsWith("Complete:"),null,{timeout:150000});
   let output=await page.locator("#output").inputValue();
   assert.match(output,/HELLO/i,"Real Tesseract OCR missed the sample image: "+output);
   console.log("Real image OCR recognized:",output.replace(/\s+/g," ").slice(0,160));
@@ -40,7 +40,7 @@ try {
   await paper.close();
   await page.locator("#file-input").setInputFiles({name:"hello.pdf",mimeType:"application/pdf",buffer:pdf});
   await page.locator("#recognize").click();
-  await page.waitForFunction(()=>document.querySelector("#status").textContent.startsWith("Complete:"),{timeout:150000});
+  await page.waitForFunction(()=>document.querySelector("#status").textContent.startsWith("Complete:"),null,{timeout:150000});
   output=await page.locator("#output").inputValue();
   assert.match(output,/HELLO/i,"Real PDF OCR missed the sample PDF: "+output);
   console.log("Real PDF OCR recognized:",output.replace(/\s+/g," ").slice(0,160));
