@@ -31,6 +31,12 @@ jobs:
         run: node --check docs/app.js
       - name: Browser JavaScript tests
         run: node --test tests/*.test.mjs
+      - name: Install headless browser for UI smoke test
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser UI smoke test
+        run: node tests/ui-smoke.mjs
   pages:
     if: github.event_name != 'pull_request'
     needs: test
