@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {validateFiles,markdownFor,jsonFor,extension,filenameSafe,MAX_FILES} from "../docs/ocr-utils.mjs";
 const file=(name,size=100,lastModified=1)=>({name,size,lastModified});
 test("validates file sizes and extensions",()=>{
-  const r=validateFiles([file("scan.PNG"),file("paper.pdf"),file("evil.exe"),file("empty.jpg",0),file("big.png",26e6)]);
+  const r=validateFiles([file("scan.PNG"),file("paper.pdf"),file("evil.exe"),file("empty.jpg",0),file("big.png",27e6)]);
   assert.equal(r.selected.length,2);
   assert.equal(r.errors.length,3);
   assert.equal(extension("ABC.PDF"),"pdf");
