@@ -1,5 +1,7 @@
 # OpenOCR
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/Open_OCR/)
+
 OpenOCR extracts text from images and PDF documents. It offers two distinct applications:
 
 - **Desktop:** a Python/CustomTkinter application using a local Ollama or vLLM server with GLM-OCR. It supports multi-file images, multi-page PDFs, Markdown, valid JSON, and in-memory session history.

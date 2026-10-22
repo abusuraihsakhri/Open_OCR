@@ -39,6 +39,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Browser UI smoke test
         run: node tests/ui-smoke.mjs
+      - name: Real OCR test syntax
+        run: node --check tests/ui-real.mjs
+      - name: Real OCR image and PDF integration
+        run: node tests/ui-real.mjs
   pages:
     if: github.event_name != 'pull_request'
     needs: test
@@ -59,3 +63,23 @@ jobs:
       - name: Deploy site
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify live page and assets
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          url="${SITE_URL%/}/"
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 20 "$url" -o /tmp/openocr-index.html &&
+               grep -Fq 'Turn documents into editable text.' /tmp/openocr-index.html &&
+               curl -fsSL --max-time 20 "${url}app.js" -o /tmp/openocr-app.js &&
+               grep -Fq 'validateFiles' /tmp/openocr-app.js &&
+               curl -fsSL --max-time 20 "${url}styles.css" -o /tmp/openocr-styles.css; then
+              echo "Live site and assets verified at $url"
+              exit 0
+            fi
+            echo "Retrying live site check ($attempt/12)"
+            sleep 5
+          done
+          echo "::error::GitHub Pages is not serving the expected application and assets"
+          exit 1
+
