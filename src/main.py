@@ -34,25 +34,29 @@ def main():
     
     manager = BackendManager(model_path=model, port=port, backend_type=btype)
     
-    # We can start the backend in a thread so GUI shows up immediately with a "Loading" status
+    # Tkinter widget access must remain on the main thread.
+    app.set_status("Checking local OCR backend...", "yellow")
+    app.progress_bar.start()
+    app.btn_process.configure(state="disabled")
+
     def init_backend():
-        app.set_status("Checking local model / Starting backend...", "yellow")
-        app.progress_bar.start()
-        app.btn_process.configure(state="disabled")
-        
-        # Check if the model is downloaded
-        if not manager.check_model_exists():
-            app.set_status("Downloading GLM-OCR weights... this will take a while.", "yellow")
-        
-        # This will block until started or timed out
-        success = manager.start_backend()
-        
-        app.progress_bar.stop()
-        if success:
-            app.set_status("Ready. Backend running.", "green")
-            app.btn_process.configure(state="normal")
-        else:
-            app.set_status("Error starting backend. Check console logs.", "red")
+        try:
+            success = manager.start_backend()
+            error = None
+        except Exception as exc:
+            success = False
+            error = str(exc)
+
+        def finalize():
+            app.progress_bar.stop()
+            if success:
+                app.set_status("Ready. Backend running.", "green")
+                app.btn_process.configure(state="normal")
+            else:
+                detail = error or "Start Ollama (and pull the model) or check your vLLM settings."
+                app.set_status("Backend unavailable. " + detail, "red")
+
+        app.after(0, finalize)
 
     threading.Thread(target=init_backend, daemon=True).start()
 
