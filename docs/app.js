@@ -40,7 +40,11 @@ function addFiles(incoming) {
   if (processing) return;
   const next = validateFiles(Array.from(incoming), files);
   files = next.selected; selected();
-  status(next.errors.length ? next.errors.join(" ") : files.length + " file(s) selected.", next.errors.length ? "error" : "ready");
+  const count = files.length;
+  const summary = count === 0 ? "No supported files selected yet." :
+    count === 1 ? "1 file ready. Select “Extract text” when you’re ready." :
+    count + " files ready. Select “Extract text” when you’re ready.";
+  status(next.errors.length ? next.errors.join(" ") : summary, next.errors.length ? "error" : "ready");
 }
 fileInput.addEventListener("change",e=>{addFiles(e.target.files);fileInput.value="";});
 drop.addEventListener("keydown",e=>{
@@ -51,7 +55,7 @@ for (const event of ["dragleave","drop"]) drop.addEventListener(event,e=>{e.prev
 drop.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
 el("clear").addEventListener("click",()=>{
   if(processing)return;
-  files=[];results=[];el("progress").value=0;selected();render();status("Select a document to begin.");
+  files=[];results=[];el("progress").value=0;selected();render();status("Choose a file to get started.");
 });
 el("tab-markdown").addEventListener("click",()=>{view="markdown";render();});
 el("tab-json").addEventListener("click",()=>{view="json";render();});
@@ -107,10 +111,10 @@ async function run() {
   processing=true;results=[];render();el("progress").value=0;
   let worker=null;
   try {
-    status("Loading OCR engine and language data…");
+    status("Getting the text extractor ready. The first run can take a little longer…");
     if(window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     worker=await window.Tesseract.createWorker(el("language").value,1,{logger:m=>{
-      if (m.status==="recognizing text" && typeof m.progress==="number") status("Recognizing text… "+Math.round(m.progress*100)+"%");
+      if (m.status==="recognizing text" && typeof m.progress==="number") status("Reading text from your document… "+Math.round(m.progress*100)+"%");
     }});
     for (let i=0;i<files.length;i++) {
       const file=files[i];
@@ -118,10 +122,10 @@ async function run() {
       else await extract(worker,file,file.name,null,100*(i+1)/files.length);
     }
     el("progress").value=100;
-    status("Complete: "+results.length+" page(s) recognized.","ready");
+    status("All done — extracted text from "+results.length+(results.length===1?" page.":" pages."),"ready");
   } catch(e) {
     console.error("OCR error:",e);
-    status("OCR failed: "+(e && e.message ? e.message : String(e)),"error");
+    status("We couldn’t finish extracting text. "+(e && e.message ? e.message : String(e))+" You can try again or choose another file.","error");
   } finally {
     if(worker) {try {await worker.terminate();}catch(e){console.error("Worker cleanup error:",e);}}
     processing=false;controls();
