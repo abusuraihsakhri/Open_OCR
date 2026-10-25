@@ -26,7 +26,7 @@ try {
   await page.locator("#file-input").setInputFiles({name:"scan.png",mimeType:"image/png",buffer:Buffer.from("89504e470d0a1a0a","hex")});
   assert.equal(await page.locator("#recognize").isDisabled(),false);
   await page.locator("#recognize").click();
-  await page.waitForFunction(()=>document.querySelector("#status").textContent.includes("Complete"));
+  await page.waitForFunction(()=>document.querySelector("#status").textContent.includes("All done"));
   assert.match(await page.locator("#output").inputValue(),/Sample recognized text/);
   assert.equal(await page.locator("img").count(),0,"OCR data must remain plain text");
   await page.locator("#tab-json").click();
@@ -41,7 +41,7 @@ try {
   assert.equal(await page.locator("#recognize").isDisabled(),true);
   await page.locator("#file-input").setInputFiles({name:"report.pdf",mimeType:"application/pdf",buffer:Buffer.from("%PDF-1.4")});
   await page.locator("#recognize").click();
-  await page.waitForFunction(()=>document.querySelector("#status").textContent.includes("Complete"));
+  await page.waitForFunction(()=>document.querySelector("#status").textContent.includes("All done"));
   await page.locator("#tab-json").click();
   const pdfResults=JSON.parse(await page.locator("#output").inputValue());
   assert.equal(pdfResults.length,2);
